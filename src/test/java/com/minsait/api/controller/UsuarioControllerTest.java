@@ -2,6 +2,8 @@ package com.minsait.api.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import com.jayway.jsonpath.JsonPath;
+import com.minsait.api.controller.dto.GetTokenRequest;
 import com.minsait.api.controller.dto.UsuarioRequest;
 import com.minsait.api.repository.UsuarioRepository;
 import com.minsait.api.sicurity.util.JWTUtil;
@@ -16,6 +18,8 @@ import org.springframework.http.MediaType;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.test.web.servlet.result.MockMvcResultHandlers;
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
@@ -91,6 +95,30 @@ class UsuarioControllerTest {
         //verifica se o usuário foi inserido no banco
         final var usuarioInserido = usuarioRepository.findByLogin(request.getLogin());
         assertEquals(request.getLogin(), usuarioInserido.getLogin());
+
+        //verifica se o token gerado contem as mesmas permissões do usuário inserido
+        final var requestGetToken = new GetTokenRequest();
+        requestGetToken.setUserName(request.getLogin());
+        requestGetToken.setPassword(request.getSenha());
+        ResultActions resultActions = mvc.perform(MockMvcRequestBuilders.post("/auth/get-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(ow.writeValueAsString(requestGetToken))
+                )
+                .andExpect(MockMvcResultMatchers.status().isOk())
+                .andExpect(MockMvcResultMatchers.jsonPath("$.accessToken").isNotEmpty())
+                .andDo(MockMvcResultHandlers.print());
+
+        MvcResult result = resultActions.andReturn();
+        String contentAsString = result.getResponse().getContentAsString();
+        String accessToken = JsonPath.read(contentAsString, "$.accessToken");
+        final var tokenClaims = jwtUtil.getClaims(accessToken);
+        final ArrayList<String> authorities =  (ArrayList<String>) tokenClaims.get("authorities");
+
+        //verifica se as perimssões do request batem com as permissões inseridas no token
+        assertTrue(authorities.contains("ESCRITA_CLIENTE"));
+        assertTrue(authorities.contains("LEITURA_CLIENTE"));
+        assertTrue(authorities.contains("ESCRITA_USUARIO"));
+        assertTrue(authorities.contains("LEITURA_USUARIO"));
     }
 
     @Test
@@ -120,6 +148,39 @@ class UsuarioControllerTest {
         //deve manter a senha antiga ciptografada que já está salva no banco.
         BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
         assertTrue(encoder.matches("12345", usuarioAlterado.getSenha()));
+    }
+
+    @Test
+    @DisplayName("Deve atualizar um usuário alterando a senha")
+    void updatePasword() throws Exception {
+        final var request = new UsuarioRequest();
+        request.setId(1L);
+        request.setEmail("test-update@test.com");
+        request.setNome("Root update");
+        request.setSenha("nova-senha");
+        request.setLogin("root");
+        request.setPermissoes("ESCRITA_CLIENTE,LEITURA_CLIENTE,ESCRITA_USUARIO,LEITURA_USUARIO");
+        mvc.perform(MockMvcRequestBuilders.put("/api/usuario")
+                        .header("Authorization", "Bearer ".concat(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(ow.writeValueAsString(request))
+                )
+                .andExpect(MockMvcResultMatchers.status().isOk())
+                .andExpect(MockMvcResultMatchers.jsonPath("$.nome").value("Root update"))
+                .andDo(MockMvcResultHandlers.print());
+
+        //verifica se o usuário foi alterado no banco
+        final var usuarioAlterado = usuarioRepository.findByLogin(request.getLogin());
+        assertEquals(request.getNome(), usuarioAlterado.getNome());
+
+        //verifica se a senha foi alerada no banco
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        assertTrue(encoder.matches(request.getSenha(), usuarioAlterado.getSenha()));
+
+        //reseta a senha do usuarío root para não quebrar outros testes
+        usuarioAlterado.setLogin("root");
+        usuarioAlterado.setSenha(new BCryptPasswordEncoder().encode("12345"));
+        usuarioRepository.save(usuarioAlterado);
     }
 
     @Test
