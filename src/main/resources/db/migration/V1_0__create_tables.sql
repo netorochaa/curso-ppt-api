@@ -51,7 +51,7 @@ INSERT INTO API.USUARIO (
     API.SQ_ID_USUARIO.nextval,
     'Root',
     'root',
-    '12345',
+    '$2a$10$u6QBk4zJR2DQbbQawsXVxO0dY4FeStH.RFSazDoEFJ35JGO4uoyPy',
     'root@email.com',
     'LEITURA_USUARIO,ESCRITA_USUARIO'
  ), (

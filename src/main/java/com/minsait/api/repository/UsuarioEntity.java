@@ -4,10 +4,12 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 import javax.persistence.*;
 import javax.persistence.criteria.Predicate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 @Entity
@@ -67,5 +69,19 @@ public class UsuarioEntity {
 
             return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
         };
+    }
+
+    public Boolean isValidPassword(String password) {
+        final String pass = this.getSenha();
+
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+
+        return encoder.matches(password, pass);
+    }
+
+    public List<String> listPermissoes() {
+        String[] permissioes = this.getPermissoes().split(",");
+
+        return Arrays.asList(permissioes);
     }
 }
